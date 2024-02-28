@@ -8,13 +8,12 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
-	"hash"
-	"math/big"
-	"time"
-
 	"github.com/emmansun/gmsm/sm2"
 	"github.com/emmansun/gmsm/sm3"
 	"github.com/emmansun/gmsm/smx509"
+	"hash"
+	"math/big"
+	"time"
 )
 
 // SignedData is an opaque data structure for creating signed data payloads
@@ -65,6 +64,7 @@ type SignerInfoConfig struct {
 	ExtraSignedAttributes   []Attribute
 	ExtraUnsignedAttributes []Attribute
 	SkipCertificates        bool
+	AddSigningTime          bool
 }
 
 type signedData struct {
@@ -186,7 +186,10 @@ func (sd *SignedData) AddSignerChain(ee *smx509.Certificate, pkey crypto.Private
 	attrs := &attributes{}
 	attrs.Add(OIDAttributeContentType, sd.sd.ContentInfo.ContentType)
 	attrs.Add(OIDAttributeMessageDigest, sd.messageDigest)
-	attrs.Add(OIDAttributeSigningTime, time.Now().UTC())
+	if config.AddSigningTime {
+		attrs.Add(OIDAttributeSigningTime, time.Now().UTC())
+	}
+
 	for _, attr := range config.ExtraSignedAttributes {
 		attrs.Add(attr.Type, attr.Value)
 	}
