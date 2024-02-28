@@ -76,6 +76,15 @@ type signedData struct {
 	SignerInfos                []signerInfo           `asn1:"set"`
 }
 
+type signedDataWithNullContentInfo struct {
+	Version                    int                        `asn1:"default:1"`
+	DigestAlgorithmIdentifiers []pkix.AlgorithmIdentifier `asn1:"set"`
+	ContentInfo                interface{}
+	Certificates               rawCertificates        `asn1:"optional,tag:0"`
+	CRLs                       []pkix.CertificateList `asn1:"optional,tag:1"`
+	SignerInfos                []signerInfo           `asn1:"set"`
+}
+
 type signerInfo struct {
 	Version                   int `asn1:"default:1"`
 	IssuerAndSerialNumber     issuerAndSerial

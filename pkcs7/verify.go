@@ -171,6 +171,22 @@ func parseSignedData(data []byte) (*PKCS7, error) {
 		Signers:      sd.SignerInfos,
 		raw:          sd}, nil
 }
+func parseSignedDataWithNullContentInfo(data []byte) (*PKCS7, error) {
+	var sd signedDataWithNullContentInfo
+	asn1.Unmarshal(data, &sd)
+	certs, err := sd.Certificates.Parse()
+	if err != nil {
+		return nil, err
+	}
+	// fmt.Printf("--> Signed Data Version %d\n", sd.Version)
+
+	return &PKCS7{
+		Content:      nil,
+		Certificates: certs,
+		CRLs:         sd.CRLs,
+		Signers:      sd.SignerInfos,
+		raw:          sd}, nil
+}
 
 // verifyCertChain takes an end-entity certs, a list of potential intermediates and a
 // truststore, and built all potential chains between the EE and a trusted root.
