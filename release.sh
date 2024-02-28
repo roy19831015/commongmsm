@@ -9,7 +9,7 @@ echo "git tag v1.0.$DATE"
 git tag v1.0.$DATE
 echo "git push --tags"
 git push --tags
-git checkout master
-echo "git checkout master"
+git checkout main
+echo "git checkout main"
 echo "goreleaser release --snapshot --rm-dist"
 goreleaser release --snapshot --rm-dist
