@@ -12,4 +12,4 @@ git push --tags
 git checkout main
 echo "git checkout main"
 echo "goreleaser release --snapshot --clean"
-goreleaser release --snapshot --rclean
+goreleaser release --snapshot --clean
