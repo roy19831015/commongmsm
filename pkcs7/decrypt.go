@@ -85,3 +85,30 @@ func (eci encryptedContentInfo) decrypt(key []byte) ([]byte, error) {
 	}
 	return cipher.Decrypt(key, &eci.ContentEncryptionAlgorithm.Parameters, eci.getCiphertext())
 }
+
+func (eci encryptedContentInfo) decryptWithCipher(key []byte, cipher pkcs.Cipher) ([]byte, error) {
+	return cipher.Decrypt(key, &eci.ContentEncryptionAlgorithm.Parameters, eci.getCiphertext())
+}
+
+// Decrypt decrypts encrypted content info for recipient cert and private key
+func (p7 *PKCS7) DecryptWithCipherBlock(cert *smx509.Certificate, pkey crypto.PrivateKey, cipher pkcs.Cipher) ([]byte, error) {
+	decryptableData, ok := p7.raw.(decryptable)
+	if !ok {
+		return nil, ErrNotEncryptedContent
+	}
+	recipient := decryptableData.GetRecipient(cert)
+	if recipient == nil {
+		return nil, errors.New("pkcs7: no enveloped recipient for provided certificate")
+	}
+
+	switch pkey := pkey.(type) {
+	case crypto.Decrypter:
+		// Generic case to handle anything that provides the crypto.Decrypter interface.
+		contentKey, err := pkey.Decrypt(rand.Reader, recipient.EncryptedKey, nil)
+		if err != nil {
+			return nil, err
+		}
+		return decryptableData.GetEncryptedContentInfo().decryptWithCipher(contentKey, cipher)
+	}
+	return nil, ErrUnsupportedAlgorithm
+}
