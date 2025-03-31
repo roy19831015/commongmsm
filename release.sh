@@ -12,5 +12,5 @@ git push --tags
 git checkout main
 echo "git checkout main"
 echo "goreleaser release --snapshot --clean"
-goreleaser release --snapshot --rm-dist
+goreleaser release --snapshot --clean
 sed -i "1i//go:build !amd64 && !arm64 || purego" ./internal/sm2ec/sm2p256.go
