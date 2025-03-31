@@ -101,6 +101,16 @@ type SignerInfoConfig struct {
 	ExtraSignedAttributes   []Attribute // Additional attributes to be included in the signed attributes.
 	ExtraUnsignedAttributes []Attribute // Additional attributes to be included in the unsigned attributes.
 	SkipCertificates        bool        // Skip adding certificates to the payload
+	AddSigningTime          bool
+}
+
+type signedDataWithNullContentInfo struct {
+	Version                    int                        `asn1:"default:1"`
+	DigestAlgorithmIdentifiers []pkix.AlgorithmIdentifier `asn1:"set"`
+	ContentInfo                interface{}
+	Certificates               rawCertificates        `asn1:"optional,tag:0"`
+	CRLs                       []pkix.CertificateList `asn1:"optional,tag:1"`
+	SignerInfos                []signerInfo           `asn1:"set"`
 }
 
 type signedData struct {
@@ -248,7 +258,9 @@ func (sd *SignedData) signWithAttributes(pkey crypto.PrivateKey, config SignerIn
 	attrs := &attributes{}
 	attrs.Add(OIDAttributeContentType, sd.sd.ContentInfo.ContentType)
 	attrs.Add(OIDAttributeMessageDigest, messageDigest)
-	attrs.Add(OIDAttributeSigningTime, time.Now().UTC())
+	if config.AddSigningTime {
+		attrs.Add(OIDAttributeSigningTime, time.Now().UTC())
+	}
 	for _, attr := range config.ExtraSignedAttributes {
 		attrs.Add(attr.Type, attr.Value)
 	}

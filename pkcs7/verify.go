@@ -181,7 +181,10 @@ func (p7 *PKCS7) UnmarshalSignedAttribute(attributeType asn1.ObjectIdentifier, o
 
 func parseSignedData(data []byte) (*PKCS7, error) {
 	var sd signedData
-	asn1.Unmarshal(data, &sd)
+	_, err := asn1.Unmarshal(data, &sd)
+	if err != nil {
+		return nil, err
+	}
 	certs, err := sd.Certificates.Parse()
 	if err != nil {
 		return nil, err
@@ -327,4 +330,21 @@ func unmarshalAttribute(attrs []attribute, attributeType asn1.ObjectIdentifier, 
 		}
 	}
 	return errors.New("pkcs7: attribute type not in attributes")
+}
+
+func parseSignedDataWithNullContentInfo(data []byte) (*PKCS7, error) {
+	var sd signedDataWithNullContentInfo
+	asn1.Unmarshal(data, &sd)
+	certs, err := sd.Certificates.Parse()
+	if err != nil {
+		return nil, err
+	}
+	// fmt.Printf("--> Signed Data Version %d\n", sd.Version)
+
+	return &PKCS7{
+		Content:      nil,
+		Certificates: certs,
+		CRLs:         sd.CRLs,
+		Signers:      sd.SignerInfos,
+		raw:          sd}, nil
 }
