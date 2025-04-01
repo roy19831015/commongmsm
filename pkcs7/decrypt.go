@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rand"
+	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
 	"math/big"
@@ -141,7 +142,12 @@ func (eci encryptedContentInfo) decrypt(key []byte) ([]byte, error) {
 }
 
 func (eci encryptedContentInfo) decryptWithCipher(key []byte, cipher pkcs.Cipher) ([]byte, error) {
+	SetCipherWithAlgorithm(cipher, eci.ContentEncryptionAlgorithm)
 	return cipher.Decrypt(key, &eci.ContentEncryptionAlgorithm.Parameters, eci.getCiphertext())
+}
+
+func SetCipherWithAlgorithm(cipher pkcs.Cipher, algorithm pkix.AlgorithmIdentifier) {
+	cipher.SetOID(algorithm.Algorithm)
 }
 
 // Decrypt decrypts encrypted content info for recipient cert and private key

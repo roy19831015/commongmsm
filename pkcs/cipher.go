@@ -26,6 +26,7 @@ type Cipher interface {
 	Decrypt(key []byte, parameters *asn1.RawValue, ciphertext []byte) ([]byte, error)
 	// OID returns the OID of the cipher specified.
 	OID() asn1.ObjectIdentifier
+	SetOID(oid asn1.ObjectIdentifier)
 }
 
 var ciphers = make(map[string]func() Cipher)
@@ -71,6 +72,10 @@ type ecbBlockCipher struct {
 	baseBlockCipher
 }
 
+func (ecb *ecbBlockCipher) SetOID(oid asn1.ObjectIdentifier) {
+	ecb.oid = oid
+}
+
 func (ecb *ecbBlockCipher) Encrypt(rand io.Reader, key, plaintext []byte) (*pkix.AlgorithmIdentifier, []byte, error) {
 	block, err := ecb.newBlock(key)
 	if err != nil {
@@ -108,6 +113,10 @@ func (ecb *ecbBlockCipher) Decrypt(key []byte, parameters *asn1.RawValue, cipher
 type cbcBlockCipher struct {
 	baseBlockCipher
 	ivSize int
+}
+
+func (c *cbcBlockCipher) SetOID(oid asn1.ObjectIdentifier) {
+	c.oid = oid
 }
 
 func (c *cbcBlockCipher) Encrypt(rand io.Reader, key, plaintext []byte) (*pkix.AlgorithmIdentifier, []byte, error) {
@@ -173,6 +182,10 @@ func cbcDecrypt(block cipher.Block, iv, ciphertext []byte) ([]byte, error) {
 type gcmBlockCipher struct {
 	baseBlockCipher
 	nonceSize int
+}
+
+func (c *gcmBlockCipher) SetOID(oid asn1.ObjectIdentifier) {
+	c.oid = oid
 }
 
 // https://datatracker.ietf.org/doc/rfc5084/
