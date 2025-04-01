@@ -3,7 +3,6 @@ package pkcs7
 import (
 	"bytes"
 	"crypto"
-	"crypto/rand"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
@@ -160,15 +159,9 @@ func (p7 *PKCS7) DecryptWithCipherBlock(cert *smx509.Certificate, pkey crypto.Pr
 	if recipient == nil {
 		return nil, errors.New("pkcs7: no enveloped recipient for provided certificate")
 	}
-
-	switch pkey := pkey.(type) {
-	case crypto.Decrypter:
-		// Generic case to handle anything that provides the crypto.Decrypter interface.
-		contentKey, err := pkey.Decrypt(rand.Reader, recipient.EncryptedKey, nil)
-		if err != nil {
-			return nil, err
-		}
-		return decryptableData.GetEncryptedContentInfo().decryptWithCipher(contentKey, cipher)
+	contentKey, err := p7.session.DecryptDataKey(recipient.EncryptedKey, pkey, cert, false)
+	if err != nil {
+		return nil, err
 	}
-	return nil, ErrUnsupportedAlgorithm
+	return decryptableData.GetEncryptedContentInfo().decryptWithCipher(contentKey, cipher)
 }
