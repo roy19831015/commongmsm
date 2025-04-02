@@ -34,6 +34,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/emmansun/gmsm/interfaces"
 	"io"
 	"math/big"
 	"net"
@@ -229,9 +230,9 @@ type SignatureAlgorithm = x509.SignatureAlgorithm
 const (
 	UnknownSignatureAlgorithm = x509.UnknownSignatureAlgorithm
 
-	MD2WithRSA       = x509.MD2WithRSA  // Unsupported.
-	MD5WithRSA       = x509.MD5WithRSA  // Only supported for signing, not verification.
-	SHA1WithRSA      = x509.SHA1WithRSA // Only supported for signing, and verification of CRLs, CSRs, and OCSP responses.
+	MD2WithRSA       = x509.MD2WithRSA    // Unsupported.
+	MD5WithRSA       = x509.MD5WithRSA    // Only supported for signing, not verification.
+	SHA1WithRSA      = x509.SHA1WithRSA   // Only supported for signing, and verification of CRLs, CSRs, and OCSP responses.
 	SHA256WithRSA    = x509.SHA256WithRSA
 	SHA384WithRSA    = x509.SHA384WithRSA
 	SHA512WithRSA    = x509.SHA512WithRSA
@@ -763,6 +764,9 @@ func (c *Certificate) CheckSignatureFrom(parent *Certificate) error {
 func (c *Certificate) CheckSignature(algo SignatureAlgorithm, signed, signature []byte) error {
 	return checkSignature(algo, signed, signature, c.PublicKey, true)
 }
+func (c *Certificate) CheckSignatureByVerifier(algo SignatureAlgorithm, signed, signature []byte, ver interfaces.Verifier) error {
+	return checkSignatureByVerifier(algo, signed, signature, c.PublicKey, true, ver)
+}
 
 // CheckSignatureWithDigest verifies the signature of a certificate using the specified
 // signature algorithm and digest. It supports RSA, ECDSA, and SM2 public keys.
@@ -898,6 +902,74 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 		}
 		if isSM2 {
 			if !sm2.VerifyASN1WithSM2(pub, nil, signed, signature) {
+				return errors.New("x509: SM2 verification failure")
+			}
+		} else if !ecdsa.VerifyASN1(pub, signed, signature) {
+			return errors.New("x509: ECDSA verification failure")
+		}
+		return
+	case ed25519.PublicKey:
+		if pubKeyAlgo != Ed25519 {
+			return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
+		}
+		if !ed25519.Verify(pub, signed, signature) {
+			return errors.New("x509: Ed25519 verification failure")
+		}
+		return
+	}
+	return x509.ErrUnsupportedAlgorithm
+}
+func checkSignatureByVerifier(algo SignatureAlgorithm, signed, signature []byte, publicKey crypto.PublicKey, allowSHA1 bool, ver interfaces.Verifier) (err error) {
+	var hashType crypto.Hash
+	var pubKeyAlgo PublicKeyAlgorithm
+
+	isSM2 := (algo == SM2WithSM3)
+	for _, details := range signatureAlgorithmDetails {
+		if details.algo == algo {
+			hashType = details.hash
+			pubKeyAlgo = details.pubKeyAlgo
+			break
+		}
+	}
+
+	switch hashType {
+	case crypto.Hash(0):
+		if !isSM2 && pubKeyAlgo != Ed25519 {
+			return x509.ErrUnsupportedAlgorithm
+		}
+	case crypto.MD5:
+		return x509.InsecureAlgorithmError(algo)
+	case crypto.SHA1:
+		// SHA-1 signatures are mostly disabled. See go.dev/issue/41682.
+		if !allowSHA1 {
+			return x509.InsecureAlgorithmError(algo)
+		}
+		fallthrough
+	default:
+		if !hashType.Available() {
+			return x509.ErrUnsupportedAlgorithm
+		}
+		h := hashType.New()
+		h.Write(signed)
+		signed = h.Sum(nil)
+	}
+
+	switch pub := publicKey.(type) {
+	case *rsa.PublicKey:
+		if pubKeyAlgo != RSA {
+			return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
+		}
+		if isRSAPSS(algo) {
+			return rsa.VerifyPSS(pub, hashType, signed, signature, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash})
+		} else {
+			return rsa.VerifyPKCS1v15(pub, hashType, signed, signature)
+		}
+	case *ecdsa.PublicKey:
+		if pubKeyAlgo != ECDSA {
+			return signaturePublicKeyAlgoMismatchError(pubKeyAlgo, pub)
+		}
+		if isSM2 {
+			if !ver.VerifyASN1WithSM2(pub, nil, signed, signature) {
 				return errors.New("x509: SM2 verification failure")
 			}
 		} else if !ecdsa.VerifyASN1(pub, signed, signature) {

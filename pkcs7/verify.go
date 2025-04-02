@@ -7,10 +7,15 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"github.com/emmansun/gmsm/interfaces"
 	"time"
 
 	"github.com/emmansun/gmsm/smx509"
 )
+
+func (p7 *PKCS7) VerifyByVerifier(ver interfaces.Verifier) (err error) {
+	return p7.VerifyWithChainByVerifier(nil, ver)
+}
 
 // Verify is a wrapper around VerifyWithChain() that initializes an empty
 // trust store, effectively disabling certificate verification when validating
@@ -35,6 +40,9 @@ func (p7 *PKCS7) VerifyAsDigest() (err error) {
 func (p7 *PKCS7) VerifyWithChain(truststore *smx509.CertPool) (err error) {
 	return p7.verifyWithChain(truststore, false)
 }
+func (p7 *PKCS7) VerifyWithChainByVerifier(truststore *smx509.CertPool, ver interfaces.Verifier) (err error) {
+	return p7.verifyWithChainByVerifier(truststore, false, ver)
+}
 
 // VerifyAsDigestWithChain verifies the PKCS7 signature using the provided truststore
 // and treats the content as a precomputed digest. It returns an error if the verification fails.
@@ -48,6 +56,17 @@ func (p7 *PKCS7) verifyWithChain(truststore *smx509.CertPool, isDigest bool) (er
 	}
 	for _, signer := range p7.Signers {
 		if err := verifySignature(p7, signer, truststore, nil, isDigest); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (p7 *PKCS7) verifyWithChainByVerifier(truststore *smx509.CertPool, isDigest bool, ver interfaces.Verifier) (err error) {
+	if len(p7.Signers) == 0 {
+		return errors.New("pkcs7: Message has no signers")
+	}
+	for _, signer := range p7.Signers {
+		if err := verifySignatureByVerifier(p7, signer, truststore, nil, isDigest, ver); err != nil {
 			return err
 		}
 	}
@@ -154,6 +173,70 @@ func verifySignature(p7 *PKCS7, signer signerInfo, truststore *smx509.CertPool, 
 		return ee.CheckSignatureWithDigest(sigalg, signedData, signer.EncryptedDigest)
 	}
 	return ee.CheckSignature(sigalg, signedData, signer.EncryptedDigest)
+}
+func verifySignatureByVerifier(p7 *PKCS7, signer signerInfo, truststore *smx509.CertPool, currentTime *time.Time, isDigest bool, ver interfaces.Verifier) (err error) {
+	signedData := p7.Content
+	ee := getCertFromCertsByIssuerAndSerial(p7.Certificates, signer.IssuerAndSerialNumber)
+	if ee == nil {
+		return errors.New("pkcs7: No certificate for signer")
+	}
+	signingTime := time.Now().UTC()
+	sigalg, err := getSignatureAlgorithm(signer.DigestEncryptionAlgorithm, signer.DigestAlgorithm)
+	if err != nil {
+		return err
+	}
+	if len(signer.AuthenticatedAttributes) > 0 {
+		// TODO(fullsailor): First check the content type match
+		var digest []byte
+		err := unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeMessageDigest, &digest)
+		if err != nil {
+			return err
+		}
+		hasher, err := getHashForOID(signer.DigestAlgorithm.Algorithm)
+		if err != nil {
+			return err
+		}
+		computed := signedData
+		if !isDigest {
+			h := newHash(hasher, signer.DigestAlgorithm.Algorithm)
+			h.Write(p7.Content)
+			computed = h.Sum(nil)
+		}
+		if subtle.ConstantTimeCompare(digest, computed) != 1 {
+			return &MessageDigestMismatchError{
+				ExpectedDigest: digest,
+				ActualDigest:   computed,
+			}
+		}
+		signedData, err = marshalAttributes(signer.AuthenticatedAttributes)
+		if err != nil {
+			return err
+		}
+		err = unmarshalAttribute(signer.AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
+		if err == nil {
+			// signing time found, performing validity check
+			if signingTime.After(ee.NotAfter) || signingTime.Before(ee.NotBefore) {
+				return &InvalidSigningTimeError{
+					SigningTime: signingTime,
+					NotBefore:   ee.NotBefore,
+					NotAfter:    ee.NotAfter,
+				}
+			}
+		}
+	}
+	if truststore != nil {
+		if currentTime != nil {
+			signingTime = *currentTime
+		}
+		_, err = verifyCertChain(ee, p7.Certificates, truststore, signingTime)
+		if err != nil {
+			return err
+		}
+	}
+	if isDigest && len(signer.AuthenticatedAttributes) == 0 {
+		return ee.CheckSignatureWithDigest(sigalg, signedData, signer.EncryptedDigest)
+	}
+	return ee.CheckSignatureByVerifier(sigalg, signedData, signer.EncryptedDigest, ver)
 }
 
 // GetOnlySigner returns an x509.Certificate for the first signer of the signed
