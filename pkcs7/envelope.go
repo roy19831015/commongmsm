@@ -98,7 +98,11 @@ var ErrUnsupportedEncryptionAlgorithm = errors.New("pkcs7: cannot encrypt conten
 //
 // TODO(fullsailor): Add support for encrypting content with other algorithms
 func Encrypt(cipher pkcs.Cipher, content []byte, recipients []*smx509.Certificate) ([]byte, error) {
-	ed, err := NewEnvelopedData(cipher, content)
+	return EncryptWithSession(cipher, content, recipients, nil)
+}
+
+func EncryptWithSession(cipher pkcs.Cipher, content []byte, recipients []*smx509.Certificate, session Session) ([]byte, error) {
+	ed, err := NewEnvelopedDataWithSession(cipher, content, session)
 	if err != nil {
 		return nil, err
 	}
