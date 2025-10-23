@@ -388,7 +388,8 @@ func getSignatureAlgorithm(digestEncryption, digest pkix.AlgorithmIdentifier) (x
 			return -1, fmt.Errorf("pkcs7: unsupported digest %q for encryption algorithm %q",
 				digest.Algorithm.String(), digestEncryption.Algorithm.String())
 		}
-	case digestEncryption.Algorithm.Equal(OIDDigestEncryptionAlgorithmSM2):
+	case digestEncryption.Algorithm.Equal(OIDDigestEncryptionAlgorithmSM2),
+		digestEncryption.Algorithm.Equal(OIDDigestAlgorithmSM2SM3):
 		return smx509.SM2WithSM3, nil
 	default:
 		return -1, fmt.Errorf("pkcs7: unsupported algorithm %q",
