@@ -48,6 +48,22 @@ func NewSignedData(data []byte) (*SignedData, error) {
 	return &SignedData{sd: sd, data: data, digestOid: OIDDigestAlgorithmSHA1, contentTypeOid: OIDSignedData}, nil
 }
 
+func NewSignedDataWithCustomVersion(data []byte, version int) (*SignedData, error) {
+	content, err := asn1.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	ci := contentInfo{
+		ContentType: OIDData,
+		Content:     asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, Bytes: content, IsCompound: true},
+	}
+	sd := signedData{
+		ContentInfo: ci,
+		Version:     version,
+	}
+	return &SignedData{sd: sd, data: data, digestOid: OIDDigestAlgorithmSHA1, contentTypeOid: OIDSignedData}, nil
+}
+
 // NewSignedDataWithDigest creates a new SignedData structure with the provided digest.
 // The digest is used to initialize the SignedData object, and the content is set to an empty ASN.1 RawValue.
 // The function returns a pointer to the SignedData object and an error if any occurs.
@@ -74,6 +90,17 @@ func NewSMSignedData(data []byte) (*SignedData, error) {
 		return nil, err
 	}
 	sd.sd.ContentInfo.ContentType = SM2OIDData
+	sd.digestOid = OIDDigestAlgorithmSM3
+	sd.contentTypeOid = SM2OIDSignedData
+	return sd, nil
+}
+
+func NewSMSignedDataWithCustomVersionAndContentInfoOid(version int, data []byte, oid asn1.ObjectIdentifier) (*SignedData, error) {
+	sd, err := NewSignedDataWithCustomVersion(data, version)
+	if err != nil {
+		return nil, err
+	}
+	sd.sd.ContentInfo.ContentType = oid
 	sd.digestOid = OIDDigestAlgorithmSM3
 	sd.contentTypeOid = SM2OIDSignedData
 	return sd, nil
